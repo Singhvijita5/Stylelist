@@ -24,22 +24,43 @@ export async function onRequestPost({ request, env }) {
     return J({ error: 'Bad request' }, 400);
   if (!env.GEMINI_API_KEY) return J({ error: 'GEMINI_API_KEY is not set' }, 500);
 
-  const model = env.GEMINI_MODEL || 'gemini-2.5-flash';
   const parts = isTips
     ? [{ text: PROMPTS.tips + '\n\n' + text }]
     : [{ inline_data: { mime_type: 'image/jpeg', data: image } }, { text: PROMPTS[task] }];
+  const payload = JSON.stringify({ contents: [{ parts }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1500, temperature: 0.2 } });
+  const call = (model) => fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+    method: 'POST', headers: { 'x-goog-api-key': env.GEMINI_API_KEY, 'content-type': 'application/json' }, body: payload
+  });
+  const tried = [];
+  let last = null, okResp = null;
   try {
-    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
-      method: 'POST',
-      headers: { 'x-goog-api-key': env.GEMINI_API_KEY, 'content-type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 600, temperature: 0.2 } })
-    });
-    if (!r.ok) return J({ error: 'AI error ' + r.status }, 502);
-    const j = await r.json();
+    // Try the configured model first, then safe fallbacks (model names change over time).
+    const chain = [env.GEMINI_MODEL, 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'].filter(Boolean);
+    let list = [...new Set(chain)];
+    for (let i = 0; i < list.length && i < 8; i++) {
+      const r = await call(list[i]);
+      tried.push(list[i] + ':' + r.status);
+      if (r.ok) { okResp = r; break; }
+      let msg = ''; try { msg = ((await r.json()).error || {}).message || ''; } catch (e) {}
+      last = { status: r.status, msg: msg.slice(0, 160) };
+      if (![404, 429, 500, 503].includes(r.status)) break;
+      // After the first pass of 404s, ask Google which models this key can use.
+      if (i === list.length - 1 && r.status === 404 && list.length < 8) {
+        try {
+          const m = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=100', { headers: { 'x-goog-api-key': env.GEMINI_API_KEY } });
+          const mj = await m.json();
+          const ok = (mj.models || []).filter(x => (x.supportedGenerationMethods || []).includes('generateContent')).map(x => x.name.replace('models/', ''))
+            .filter(n => /flash|hydrogen/i.test(n) && !/image|tts|live|audio|embed|thinking-exp/i.test(n) && !list.includes(n)).slice(0, 4);
+          list = list.concat(ok);
+        } catch (e) {}
+      }
+    }
+    if (!okResp) return J({ error: 'AI error ' + ((last && last.status) || 'none'), detail: (last && last.msg) || '', tried }, 502);
+    const j = await okResp.json();
     const out = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('');
-    const m = out.match(/[\{\[][\s\S]*[\}\]]/);
-    return J(m ? JSON.parse(m[0]) : {});
+    const mm = out.match(/[\{\[][\s\S]*[\}\]]/);
+    return J(mm ? JSON.parse(mm[0]) : {});
   } catch (e) {
-    return J({ error: 'AI call failed' }, 500);
+    return J({ error: 'AI call failed', tried }, 500);
   }
 }
