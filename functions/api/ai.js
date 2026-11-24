@@ -27,10 +27,10 @@ export async function onRequestPost({ request, env }) {
   const parts = isTips
     ? [{ text: PROMPTS.tips + '\n\n' + text }]
     : [{ inline_data: { mime_type: 'image/jpeg', data: image } }, { text: PROMPTS[task] }];
-  const payload = JSON.stringify({ contents: [{ parts }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1500, temperature: 0.2 } });
-  const call = (model) => fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
-    method: 'POST', headers: { 'x-goog-api-key': env.GEMINI_API_KEY, 'content-type': 'application/json' }, body: payload
-  });
+  const payload = JSON.stringify({ contents: [{ parts }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 4096, temperature: 0.2 } });
+  const call = (model) => { const ac = new AbortController(); setTimeout(() => ac.abort(), 22000); return fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+    method: 'POST', headers: { 'x-goog-api-key': env.GEMINI_API_KEY, 'content-type': 'application/json' }, body: payload, signal: ac.signal
+  }); };
   const tried = [];
   let last = null, okResp = null;
   try {
@@ -38,7 +38,7 @@ export async function onRequestPost({ request, env }) {
     const chain = [env.GEMINI_MODEL, 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'].filter(Boolean);
     let list = [...new Set(chain)];
     for (let i = 0; i < list.length && i < 8; i++) {
-      const r = await call(list[i]);
+      let r; try { r = await call(list[i]); } catch (e) { tried.push(list[i] + ':timeout'); last = { status: 504, msg: 'timeout' }; continue; }
       tried.push(list[i] + ':' + r.status);
       if (r.ok) { okResp = r; break; }
       let msg = ''; try { msg = ((await r.json()).error || {}).message || ''; } catch (e) {}
@@ -59,7 +59,8 @@ export async function onRequestPost({ request, env }) {
     const j = await okResp.json();
     const out = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('');
     const mm = out.match(/[\{\[][\s\S]*[\}\]]/);
-    return J(mm ? JSON.parse(mm[0]) : {});
+    if (!mm) { const c0 = (j.candidates && j.candidates[0]) || {}; return J({ _empty: true, finish: c0.finishReason || (j.promptFeedback && j.promptFeedback.blockReason) || '', parts: ((c0.content && c0.content.parts) || []).length, sample: out.slice(0, 120), tried }); }
+    return J(JSON.parse(mm[0]));
   } catch (e) {
     return J({ error: 'AI call failed', tried }, 500);
   }
