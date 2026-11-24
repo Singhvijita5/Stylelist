@@ -27,5 +27,5 @@ window.CFG = {
 };
 
 // Google login + cloud sync (optional). See README_LOGIN.md. Leave null to disable.
-window.SL_FIREBASE = null;
+window.SL_FIREBASE = { apiKey:"AIzaSyCt3wHmtRyXMdhAw1PMVGSjvAEsPphsqeU", authDomain:"stylelist-fab8c.firebaseapp.com", projectId:"stylelist-fab8c", appId:"1:151806085608:web:129ebb86879bb7dbddbc5d" };
 // window.SL_FIREBASE = { apiKey:"", authDomain:"", projectId:"", appId:"" };

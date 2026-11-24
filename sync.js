@@ -11,7 +11,7 @@ const mobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const doc=()=>db.collection('users').doc(user.uid);
 const ready=()=>RESTORED||['fit','ward','sty'].includes(V);
 const strip=w=>{const o=Object.assign({},w);delete o.cut;return o};
-const pack=()=>{let w=W.map(strip);let j=JSON.stringify(w);if(j.length>600000){w=w.map(x=>x.img&&x.img.startsWith('data:image/jpeg')?Object.assign({},x,{img:''}):x)}return{v:1,p:P,w:JSON.stringify(w),sv:JSON.stringify(SV),ts:JSON.stringify(TS),open:OPEN,t:Date.now()}};
+const pack=()=>{let w=W.map(strip);while(JSON.stringify(w).length>600000){let bi=-1,bl=3000;w.forEach((x,i)=>{if(x.img&&x.img.startsWith('data:image')&&x.img.length>bl){bl=x.img.length;bi=i}});if(bi<0)break;w[bi]=Object.assign({},w[bi],{img:''})}return{v:1,p:P,w:JSON.stringify(w),sv:JSON.stringify(SV),ts:JSON.stringify(TS),open:OPEN,t:Date.now()}};
 const sigNow=()=>JSON.stringify([P,W.map(w=>w.id+w.n+w.c+w.hex+(w.bought||'')),SV,TS,OPEN]);
 const key=w=>(w.srcId||'')+'|'+w.n+'|'+w.c+'|'+w.hex;
 function apply(d){
@@ -38,7 +38,7 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
   if(a==='gin'){e.stopImmediatePropagation();if(!agree){toast('Please tick the agreement first');return}
     const pr=new firebase.auth.GoogleAuthProvider();
-    try{mobile?await auth.signInWithRedirect(pr):await auth.signInWithPopup(pr)}catch(x){err='Sign-in failed: '+(x.code||x.message);draw()}}
+    try{await auth.signInWithPopup(pr)}catch(x){if(x.code==='auth/popup-blocked'||x.code==='auth/operation-not-supported-in-this-environment'){try{await auth.signInWithRedirect(pr);return}catch(y){x=y}}if(x.code!=='auth/popup-closed-by-user'&&x.code!=='auth/cancelled-popup-request'){err='Sign-in failed: '+(x.code||x.message);draw()}}}
   else if(a==='gout'){e.stopImmediatePropagation();await push();await auth.signOut();toast('Signed out');}
   else if(a==='gdel'){e.stopImmediatePropagation();if(!confirm('Delete your cloud data and account? Data on this phone stays until you clear it.'))return;
     try{await doc().delete();try{await user.delete()}catch(_){await auth.signOut()}toast('Your cloud data was deleted')}catch(x){toast('Could not delete. Try again.')}}
