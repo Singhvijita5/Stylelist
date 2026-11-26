@@ -29,21 +29,21 @@ function apply(d){
 }
 async function push(){if(!user||!ready())return;try{await doc().set(pack());lastSync=Date.now();lastSig=sigNow();err=''}catch(e){err='Could not sync. Will retry.'}draw()}
 async function pull(){try{const s=await doc().get();if(s.exists){apply(s.data())}lastSig='';await push();}catch(e){err='Could not load your saved data.';draw()}}
-auth.onAuthStateChanged(async u=>{user=u;if(u){toast('Signed in as '+(u.displayName||u.email));await pull()}else draw()});
+auth.onAuthStateChanged(async u=>{user=u;if(u){try{ls.s('sl_guest',1)}catch(_){}toast('Signed in as '+(u.displayName||u.email));await pull();if(V==='login'){V='hero';draw()}}else draw()});
 auth.getRedirectResult().catch(e=>{err='Sign-in failed: '+(e.code||e.message);draw()});
 setInterval(()=>{if(!user||!ready())return;const s=sigNow();if(s!==lastSig){clearTimeout(timer);timer=setTimeout(push,1500)}},4000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&user)pull()});
 document.addEventListener('change',e=>{if(e.target&&e.target.id==='gc')agree=e.target.checked});
 document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
-  if(a==='gin'){e.stopImmediatePropagation();if(!agree){toast('Please tick the agreement first');return}
+  if(a==='gin'||a==='gin2'){e.stopImmediatePropagation();if(a==='gin2')agree=true;if(!agree){toast('Please tick the agreement first');return}
     const pr=new firebase.auth.GoogleAuthProvider();
     try{await auth.signInWithPopup(pr)}catch(x){if(x.code==='auth/popup-blocked'||x.code==='auth/operation-not-supported-in-this-environment'){try{await auth.signInWithRedirect(pr);return}catch(y){x=y}}if(x.code!=='auth/popup-closed-by-user'&&x.code!=='auth/cancelled-popup-request'){err='Sign-in failed: '+(x.code||x.message);draw()}}}
   else if(a==='gout'){e.stopImmediatePropagation();await push();await auth.signOut();toast('Signed out');}
   else if(a==='gdel'){e.stopImmediatePropagation();if(!confirm('Delete your cloud data and account? Data on this phone stays until you clear it.'))return;
     try{await doc().delete();try{await user.delete()}catch(_){await auth.signOut()}toast('Your cloud data was deleted')}catch(x){toast('Could not delete. Try again.')}}
 },true);
-window.SLSYNC={on:true,card(mini){
+window.SLSYNC={on:true,err:()=>err,card(mini){
   if(user)return`<div class="card"><b>Signed in</b><br><span class="m">${esc(user.email||'')}${lastSync?' · saved '+new Date(lastSync).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</span>${err?`<p class="m" style="color:#C5221A">${esc(err)}</p>`:''}<p class="m">Your profile, wardrobe and saved looks are backed up and come back on any phone when you sign in. Your face and body photo are never uploaded.</p><button class="btn s" data-a="gout">Sign out</button><button class="btn l" data-a="gdel">Delete my cloud data</button></div>`;
   return`<div class="card"><b>${mini?'Already a member? Restore your data':'Save your profile'}</b><p class="m">Sign in with Google to keep your profile, wardrobe and saved looks safe and get them back on any phone. We store your style choices and wardrobe pieces. We never upload your face or body photo.</p>${err?`<p class="m" style="color:#C5221A">${esc(err)}</p>`:''}<label class="row m" style="gap:10px;align-items:flex-start"><input type="checkbox" id="gc" ${agree?'checked':''} style="width:22px;height:22px;flex:none;margin-top:2px"><span>I agree to the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> and to saving this data to my account.</span></label><button class="btn" data-a="gin">Continue with Google</button></div>`}};
 draw();
